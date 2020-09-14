@@ -103,18 +103,29 @@ int main()
     Eigen::VectorXd f(1);
     Eigen::MatrixXd j(1, 7);
 
+    Eigen::VectorXd q_best(7);
+    double best_value = 1e100;
 
     function(x, f);
     int i = 0;
-    while (f(0) > 1e-6 && iter++ < 1000)
+    double ratio = 1;
+    double gamma = 0.95;
+    while (f(0) > 1e-6 && iter++ < 50) 
     {
       jacobian(x, j);
-      x -= j.jacobiSvd(Eigen::ComputeThinU | Eigen::ComputeThinV).solve(f);
+      x -= ratio * j.jacobiSvd(Eigen::ComputeThinU | Eigen::ComputeThinV).solve(f);
+      ratio *= gamma;
       function(x, f);
+      if (f(0) < best_value)
+      {
+        best_value = f(0);
+        q_best = x;
+      }
       std::cout << "iter[" << i ++ << "]: " <<  x.transpose() << std::endl
                 << "    - f: " << f(0) << std::endl;
     }
-    return f(0) > 5e-6;
+    x = q_best;
+    return best_value > 5e-6;
   };
 
   Eigen::VectorXd q(7);
@@ -128,6 +139,7 @@ int main()
   std::cout << "f: " << r << std::endl;
 
   std::cout << q.transpose() << std::endl;
+  std::cout << "in deg: " << q.transpose() * 180.0 / 3.141592653589 << std::endl;
 
   std::ofstream x_out_1("x_out_1.txt"), x_out_2("x_out_2.txt");
 
