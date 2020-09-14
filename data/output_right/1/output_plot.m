@@ -1,6 +1,6 @@
-d1 = load("build/x_out_1.txt");
-d2 = load("build/x_out_2.txt");
-d3 = load("build/x_out_3.txt");
+d1 = load("x_out_1.txt");
+d2 = load("x_out_2.txt");
+d3 = load("x_out_3.txt");
 
 close all
 d1_true = [-0.65, 0.0, 0.064];
