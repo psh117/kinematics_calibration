@@ -6,6 +6,27 @@
 #include <robot_model/franka_panda_model.h>
 #include "suhan_benchmark.h"
 
+// // dh test
+// int main()
+// {
+//   auto fpm = FrankaPandaModel();
+//   Eigen::VectorXd q(7);
+//   q << 0, 0, 0, -1.57, 0, 1.57, 0.77;
+
+//   auto t = fpm.getTransform(q);
+//   std::cout << t.matrix() << std::endl;
+
+//   Eigen::Matrix<double, 7,4> dh;
+//   dh.setZero();
+//   dh(0,0) = 0.01;
+//   fpm.initModel(dh);
+  
+
+//   auto t2 = fpm.getTransform(q);
+//   std::cout << t2.matrix() << std::endl;
+//   return 0;
+// }
+
 std::mutex data_mutex;
 std::mutex print_mutex;
 
@@ -20,7 +41,6 @@ Eigen::Vector3d true_p_3;
 
 void work()
 {
-
   auto fpm = FrankaPandaModel();
   auto function = [&fpm](const Eigen::Ref<const Eigen::VectorXd> &x, Eigen::Ref<Eigen::VectorXd> out) {
     double err = 0.0;

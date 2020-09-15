@@ -24,9 +24,10 @@ public:
   Eigen::VectorXd getInitialConfiguration() const override;
 
   int getDof() override;
+  void initModel();
+  void initModel(const Eigen::Ref<const Eigen::Matrix<double, 7, 4> > & dh); // 7x4
 
 private:
-  void initModel();
 
   RigidBodyDynamics::Math::Vector3d com_position_[kDof];
   RigidBodyDynamics::Math::Vector3d ee_position_;
