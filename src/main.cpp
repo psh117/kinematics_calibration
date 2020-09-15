@@ -4,12 +4,12 @@
 #include <mutex>
 #include <thread>
 #include <robot_model/franka_panda_model.h>
-
+#include "suhan_benchmark.h"
 
 std::mutex data_mutex;
 std::mutex print_mutex;
 
-double min_cost;
+double min_cost = 1e100;
 Eigen::Matrix<double, 7, 1> best_sol;
 
 std::vector<Eigen::Matrix<double, 7, 1> > q_input_1, q_input_2, q_input_3;
@@ -81,7 +81,33 @@ void work()
     }
   };
 
-  auto project = [function, jacobian](Eigen::Ref<Eigen::VectorXd> x) {
+  auto jacobian2 = [function, &fpm](const Eigen::Ref<const Eigen::VectorXd> &x, Eigen::Ref<Eigen::MatrixXd> out)
+  {
+    Eigen::Matrix<double, 1, 7> grad;
+    grad.setZero(1,7);
+    for (auto & q : q_input_1)
+    {
+      auto t = fpm.getTranslation(q+x);
+      grad += (t-true_p_1).transpose() * fpm.getJacobianMatrix(q+x).block<3,7>(0,0);
+    }
+
+    for (auto & q : q_input_2)
+    {
+      auto t = fpm.getTranslation(q+x);
+      grad += (t-true_p_2).transpose() * fpm.getJacobianMatrix(q+x).block<3,7>(0,0);
+    }
+    for (auto & q : q_input_3)
+    {
+      auto t = fpm.getTranslation(q+x);
+      grad += (t-true_p_3).transpose() * fpm.getJacobianMatrix(q+x).block<3,7>(0,0);
+    }
+
+    grad /= (q_input_1.size() + q_input_2.size() + q_input_3.size()) / 2.0;
+
+    out = grad; //function3d(x).transpose() * fpm.getJacobianMatrix(x).block<3,7>(0,0);
+  };
+
+  auto project = [function, jacobian2](Eigen::Ref<Eigen::VectorXd> x) {
     // Newton's method
     unsigned int iter = 0;
     double norm = 0;
@@ -95,9 +121,9 @@ void work()
     int i = 0;
     double ratio = 1.0;
     double gamma = 0.95;
-    while (f(0) > 1e-6 && iter++ < 50) 
+    while (f(0) > 1e-6 && iter++ < 15) 
     {
-      jacobian(x, j);
+      jacobian2(x, j);
       x -= ratio * j.jacobiSvd(Eigen::ComputeThinU | Eigen::ComputeThinV).solve(f);
       ratio *= gamma;
       function(x, f);
@@ -123,7 +149,7 @@ void work()
   };
 
   Eigen::VectorXd q(7);
-  q = Eigen::Matrix<double, 7, 1>::Random() * 0.001;
+  q = Eigen::Matrix<double, 7, 1>::Random() * 0.01;
   Eigen::VectorXd r(1);
   function(q,r);
   std::cout << "f: " << r << std::endl;
@@ -132,8 +158,9 @@ void work()
   function(q,r);
 
 }
-int main()
+int main(int argc, char**argv)
 {
+  srand(time(NULL));
   std::ifstream rf; 
   std::cout << "read data 1\n"; 
   rf.open("q_data_1.txt");
@@ -176,20 +203,120 @@ int main()
   }
   rf.close();
   std::cout << "complete - size: " << q_input_3.size() << std::endl;
+  
+  double z = 0.065;
+  if (argc  == 2)
+  {
+    z = std::atof(argv[1]); 
+  }
+  true_p_1 << -0.65, 0.0, z;
+  true_p_2 << 0.0, 0.45, z;
+  true_p_3 << 0.675, 0, z;
 
-  true_p_1 << -0.65, 0.0, 0.064;
-  true_p_2 << 0.0, 0.45, 0.064;
-  true_p_3 << 0.675, 0, 0.064;
+
+
+  auto fpm = FrankaPandaModel();
+  auto function = [&fpm](const Eigen::Ref<const Eigen::VectorXd> &x, Eigen::Ref<Eigen::VectorXd> out) {
+    double err = 0.0;
+    for (auto & q : q_input_1)
+    {
+      auto t = fpm.getTranslation(q+x);
+      err += (t-true_p_1).squaredNorm();
+    }
+
+    for (auto & q : q_input_2)
+    {
+      auto t = fpm.getTranslation(q+x);
+      err += (t-true_p_2).squaredNorm();
+    }
+    for (auto & q : q_input_3)
+    {
+      auto t = fpm.getTranslation(q+x);
+      err += (t-true_p_3).squaredNorm();
+    }
+    err /= (q_input_1.size() + q_input_2.size() + q_input_3.size());
+
+    out(0) = err;
+  };
+  auto function3d = [&fpm](const Eigen::Ref<const Eigen::VectorXd> &x, Eigen::Ref<Eigen::VectorXd> out) {
+    Eigen::Vector3d err;
+    err.setZero();
+    for (auto & q : q_input_1)
+    {
+      auto t = fpm.getTranslation(q+x);
+      err += (t-true_p_1);
+    }
+
+    for (auto & q : q_input_2)
+    {
+      auto t = fpm.getTranslation(q+x);
+      err += (t-true_p_2);
+    }
+    for (auto & q : q_input_3)
+    {
+      auto t = fpm.getTranslation(q+x);
+      err += (t-true_p_3);
+    }
+    err /= (q_input_1.size() + q_input_2.size() + q_input_3.size());
+
+    out = err;
+  };
+  auto jacobian = [function](const Eigen::Ref<const Eigen::VectorXd> &x, Eigen::Ref<Eigen::MatrixXd> out) {
+    Eigen::VectorXd y1 = x;
+    Eigen::VectorXd y2 = x;
+    Eigen::VectorXd t1(1);
+    Eigen::VectorXd t2(1);
+
+    // Use a 7-point central difference stencil on each column.
+    for (std::size_t j = 0; j < 7; j++)
+    {
+      const double ax = std::fabs(x[j]);
+      // Make step size as small as possible while still giving usable accuracy.
+      const double h = std::sqrt(std::numeric_limits<double>::epsilon()) * (ax >= 1 ? ax : 1);
+
+      // Can't assume y1[j]-y2[j] == 2*h because of precision errors.
+      y1[j] += h;
+      y2[j] -= h;
+      function(y1, t1);
+      function(y2, t2);
+      const Eigen::VectorXd m1 = (t1 - t2) / (y1[j] - y2[j]);
+      y1[j] += h;
+      y2[j] -= h;
+      function(y1, t1);
+      function(y2, t2);
+      const Eigen::VectorXd m2 = (t1 - t2) / (y1[j] - y2[j]);
+      y1[j] += h;
+      y2[j] -= h;
+      function(y1, t1);
+      function(y2, t2);
+      const Eigen::VectorXd m3 = (t1 - t2) / (y1[j] - y2[j]);
+
+      out.col(j) = 1.5 * m1 - 0.6 * m2 + 0.1 * m3;
+
+      // Reset for next iteration.
+      y1[j] = y2[j] = x[j];
+    }
+  };
 
   std::vector<std::thread> processes;
-  processes.push_back(std::thread(work));
-  processes.push_back(std::thread(work));
-  processes.push_back(std::thread(work));
-  processes.push_back(std::thread(work));
-  processes.push_back(std::thread(work));
-  processes.push_back(std::thread(work));
-  processes.push_back(std::thread(work));
-  processes.push_back(std::thread(work));
+
+  for (int i = 0; i < 64; i++)
+  {
+    processes.push_back(std::thread(work));
+
+    // Eigen::VectorXd q(7);
+    // Eigen::VectorXd r1(1), r2(1);
+    // q = Eigen::Matrix<double, 7, 1>::Random() * 0.01;
+    // auto sb = SuhanBenchmark();
+    // sb.reset();
+    // jacobian(q,r1);
+    // double t1 = sb.elapsedAndReset();
+    // jacobian2(q,r2);
+    // double t2 = sb.elapsedAndReset();
+    // std::cout << "q: " << q.transpose()  << std::endl;
+    // std::cout << "r1: " << r1 << ", r2: " << r2 << ", t1: " << t1 << ", t2: " << t2 << " diff: " << (r1-r2) << std::endl;
+    
+  }
 
   for (auto & process : processes)
   {
@@ -203,7 +330,7 @@ int main()
 
   std::ofstream x_out_1("x_out_1.txt"), x_out_2("x_out_2.txt"), x_out_3("x_out_3.txt");
 
-  auto fpm = FrankaPandaModel();
+  // auto fpm = FrankaPandaModel();
   for (auto & q_raw : q_input_1)
   {
     auto t = fpm.getTranslation(q_raw + best_sol);
