@@ -17,7 +17,7 @@ include_directories(
 
 
 add_executable(${PROJECT_NAME}_node 
-  src/main.cpp
+  src/main2.cpp
   src/robot_model/franka_panda_model.cpp
 )
 

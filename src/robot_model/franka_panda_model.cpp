@@ -44,6 +44,7 @@ Eigen::Matrix3d FrankaPandaModel::getRotation(const Eigen::VectorXd &q) const
 Eigen::Isometry3d FrankaPandaModel::getTransform(const Eigen::VectorXd &q) const
 {
   Eigen::Isometry3d transform;
+  transform.setIdentity();
   transform.linear() = getRotation(q);
   transform.translation() = getTranslation(q);
 
