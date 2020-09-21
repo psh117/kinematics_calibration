@@ -32,7 +32,7 @@ private:
   RigidBodyDynamics::Math::Vector3d com_position_[kDof];
   RigidBodyDynamics::Math::Vector3d ee_position_;
   Eigen::Vector3d joint_posision_[kDof];
-  Eigen::Isometry3d joint_frame_[kDof];
+  Eigen::Matrix3d rot_ee_;
   std::shared_ptr<RigidBodyDynamics::Model> model_;
   unsigned int body_id_[kDof];
   RigidBodyDynamics::Body body_[kDof];

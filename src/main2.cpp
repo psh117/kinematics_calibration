@@ -7,7 +7,7 @@
 #include <robot_model/franka_panda_model.h>
 #include "suhan_benchmark.h"
 
-const int N_DH = 3; // number of dh parameters to calibrate
+const int N_DH = 4; // number of dh parameters to calibrate
 const int N_J = 7; // number of joints to calibrate
 const int N_CAL = N_DH*N_J; // total variables to calibrate
 const bool test_transform = true;
@@ -127,21 +127,11 @@ int main(int argc, char**argv)
     Eigen::Ref<Eigen::VectorXd> q_offset = dh.col(2);
     Eigen::Ref<Eigen::VectorXd> alpha_offset = dh.col(3);
 
-    Eigen::Isometry3d T_0e_test, T_0e;
-    T_0e_test.setIdentity();
-    for (int i=0; i<7; i++)
-    {
-      T_0e_test = T_0e_test * transformKim(dh_a(i) + a_offset(i), dh_d(i) + d_offset(i) ,  dh_al(i)+alpha_offset(i), q(i)+q_offset(i));
-    }
-    T_0e_test = T_0e_test * transformKim(0.0, 0.107, 0.0, 0.0);
-
-    // Eigen::Isometry3d T_0e;
-    // T_0e.setIdentity();
-    // fpm.initModel(dh);
-    // T_0e = fpm.getTransform(q+q_offset);
-
-    // auto t = T_0e.translation();
-    auto t = T_0e_test.translation();
+    Eigen::Isometry3d T_0e;
+    T_0e.setIdentity();
+    fpm.initModel(dh);
+    T_0e = fpm.getTransform(q);
+    auto t = T_0e.translation();
 
     out = c.second - t;
   };
@@ -202,14 +192,13 @@ int main(int argc, char**argv)
     Eigen::Ref<Eigen::VectorXd> alpha_offset = dh.col(3);
 
     fpm.initModel(dh);
-    T_0e = fpm.getTransform(q+q_offset);
-    // T_0e = fpm.getTransform(q);
+    T_0e = fpm.getTransform(q);
 
     Eigen::Isometry3d T_0e_test;
     T_0e_test.setIdentity();
     for (int i=0; i<7; i++)
     {
-      T_0e_test = T_0e_test * transformKim(dh_a(i) + a_offset(i), dh_d(i) + d_offset(i) ,  dh_al(i)+alpha_offset(i), q(i)+q_offset(i));
+      T_0e_test = T_0e_test * transformKim(dh_a(i) + a_offset(i), dh_d(i) + d_offset(i) ,  dh_al(i) + alpha_offset(i), q(i) + q_offset(i));
     }
     T_0e_test = T_0e_test * transformKim(0.0, 0.107, 0.0, 0.0);
 
@@ -219,7 +208,8 @@ int main(int argc, char**argv)
       std::cout << "function made:\n" << T_0e_test.matrix() << std::endl;
       std::cout << "translation diff:\n" << (T_0e.translation() - T_0e_test.translation()).norm() << std::endl;
     }
-    p_ie = T_0e_test.translation();
+
+    p_ie = T_0e.translation();
 
     for (int i=0; i<N_J; i++)
     { 
@@ -231,7 +221,7 @@ int main(int argc, char**argv)
 
       T_0i = T_0i * transformKim(dh_a(i) + a_offset(i), dh_d(i) + d_offset(i), dh_al(i)+alpha_offset(i), q(i)+q_offset(i));
       R_0i = T_0i.linear();
-      p_ie = (T_0i.inverse() * T_0e_test).translation();
+      p_ie = (T_0i.inverse() * T_0e).translation();
 
       jacob_k.col(0 + i*N_DH) += x_0i_1;
       jacob_k.col(1 + i*N_DH) += z_0i;
@@ -242,16 +232,14 @@ int main(int argc, char**argv)
   };
 
   Eigen::VectorXd x(N_CAL);
-  x = Eigen::Matrix<double, N_CAL, 1>::Random() * 0.01;
-  if(N_DH == 4) {for(int i=0; i<N_J; i++){x(3+i*N_DH)=0;}}
-  // x.setZero();
+  // x = Eigen::Matrix<double, N_CAL, 1>::Random() * 0.01;
+  x.setZero();
   if(test_transform)
   {
     Eigen::VectorXd q(N_J);
     // q << 0, 0, 0, 0, 0, 0, 0;
-    q << 0, 0, 0, -1.57, 0, 1.57, 0.79;
-    // q << 0, 0, 0, -0.79, 0.79, 1.57, 0.79;
-    // q = calib_dataset[0].first;
+    // q << 0, 0, 0, -1.57, 0, 1.57, 0.79;
+    q = calib_dataset[0].first;
     Eigen::MatrixXd j1(3,N_CAL), j2(3,N_CAL);
     jacobian_dh(x,std::make_pair(q, true_p_1),j1);
     jacobian_kim2(x,std::make_pair(q, true_p_1),j2);
