@@ -26,3 +26,25 @@ target_link_libraries(${PROJECT_NAME}_node
   ${RBDL_LIBRARY}
   pthread
 )
+
+add_executable(${PROJECT_NAME}_node9
+  src/main_KETI.cpp
+  src/robot_model/franka_panda_model.cpp
+)
+
+target_link_libraries(${PROJECT_NAME}_node9
+  ${catkin_LIBRARIES}  
+  ${RBDL_LIBRARY}
+  pthread
+)
+
+add_executable(hc_closed_chain_calibration_node
+  src/hc_closed_chain.cpp
+  src/robot_model/franka_panda_model.cpp
+)
+
+target_link_libraries(hc_closed_chain_calibration_node
+  ${catkin_LIBRARIES}  
+  ${RBDL_LIBRARY}
+  pthread
+)

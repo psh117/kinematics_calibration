@@ -7,9 +7,7 @@
 #include <robot_model/franka_panda_model.h>
 #include "suhan_benchmark.h"
 
-#define TEST_PRINT
-
-const int N_DH = 4; // number of dh parameters to calibrate
+const int N_DH = 3; // number of dh parameters to calibrate
 const int N_J = 7; // number of joints to calibrate
 const int N_CAL = N_DH*N_J; // total variables to calibrate
 
@@ -126,13 +124,21 @@ int main(int argc, char**argv)
     Eigen::Ref<Eigen::VectorXd> a_offset = dh.col(0);
     Eigen::Ref<Eigen::VectorXd> d_offset = dh.col(1);
     Eigen::Ref<Eigen::VectorXd> q_offset = dh.col(2);
-    Eigen::Ref<Eigen::VectorXd> alpha_offset = dh.col(3);
+    // Eigen::Ref<Eigen::VectorXd> alpha_offset = dh.col(3);
+    Eigen::VectorXd alpha_offset(7); alpha_offset.setZero();
 
     Eigen::Isometry3d T_0e;
     T_0e.setIdentity();
-    fpm.initModel(dh);
-    T_0e = fpm.getTransform(q);
+    Eigen::VectorXd alpha(7), a(7), d(7);
+    for (int i=0; i<7; i++)
+    {
+      T_0e = T_0e * transformKim(dh_a(i) + a_offset(i), dh_d(i) + d_offset(i) ,  dh_al(i)+alpha_offset(i), q(i)+q_offset(i));
+    }
+    T_0e = T_0e * transformKim(0.0, 0.107, 0.0, 0.0);
     auto t = T_0e.translation();
+
+    // fpm.initModel(dh);
+    // auto t = fpm.getTranslation(q+q_offset);
 
     out = c.second - t;
   };
@@ -190,26 +196,24 @@ int main(int argc, char**argv)
     Eigen::Ref<Eigen::VectorXd> a_offset = dh.col(0);
     Eigen::Ref<Eigen::VectorXd> d_offset = dh.col(1);
     Eigen::Ref<Eigen::VectorXd> q_offset = dh.col(2);
-    Eigen::Ref<Eigen::VectorXd> alpha_offset = dh.col(3);
+    // Eigen::Ref<Eigen::VectorXd> alpha_offset = dh.col(3);
+    Eigen::VectorXd alpha_offset(7); alpha_offset.setZero();
 
     fpm.initModel(dh);
-    T_0e = fpm.getTransform(q);
+    T_0e = fpm.getTransform(q+q_offset);
+    p_ie = T_0e.translation();
 
     Eigen::Isometry3d T_0e_test;
     T_0e_test.setIdentity();
     for (int i=0; i<7; i++)
     {
-      T_0e_test = T_0e_test * transformKim(dh_a(i) + a_offset(i), dh_d(i) + d_offset(i) ,  dh_al(i) + alpha_offset(i), q(i) + q_offset(i));
+      T_0e_test = T_0e_test * transformKim(dh_a(i) + a_offset(i), dh_d(i) + d_offset(i) ,  dh_al(i)+alpha_offset(i), q(i)+q_offset(i));
     }
     T_0e_test = T_0e_test * transformKim(0.0, 0.107, 0.0, 0.0);
 
-#ifdef TEST_PRINT
-    std::cout << "franka model updater:\n" << T_0e.matrix() << std::endl;
-    std::cout << "function made:\n" << T_0e_test.matrix() << std::endl;
-    std::cout << "translation diff:\n" << (T_0e.translation() - T_0e_test.translation()).norm() << std::endl;
-#endif
-
-    p_ie = T_0e.translation();
+    // std::cout << "franka model updater:\n" << T_0e.matrix() << std::endl;
+    // std::cout << "function made:\n" << T_0e_test.matrix() << std::endl;
+    // std::cout << "translation diff:\n" << (T_0e.translation() - T_0e_test.translation()).norm() << std::endl;
 
     for (int i=0; i<N_J; i++)
     { 
@@ -231,20 +235,19 @@ int main(int argc, char**argv)
     out = -jacob_k;
   };
 
-  Eigen::VectorXd x(N_CAL);
-  x.setZero();
-#ifdef TEST_PRINT
-  // x = Eigen::Matrix<double, N_CAL, 1>::Random() * 0.01;
   Eigen::VectorXd q(N_J);
-  // q << 0, 0, 0, 0, 0, 0, 0;
-  // q << 0, 0, 0, -1.57, 0, 1.57, 0.79;
-  q = calib_dataset[0].first;
+  Eigen::VectorXd x(N_CAL);
+  q << 0, 0, 0, -1.57, 0, 1.57, 0.79;
+  // q << 0, 0, 0.79, -1.57, 0, 1.57, 0.79;
+  // x = Eigen::Matrix<double, N_CAL, 1>::Random() * 0.01;
+  x.setZero();
+  Eigen::VectorXd r1(1), r2(1);
   Eigen::MatrixXd j1(3,N_CAL), j2(3,N_CAL);
-  jacobian_dh(x,std::make_pair(q, true_p_1),j1);
-  jacobian_kim2(x,std::make_pair(q, true_p_1),j2);
-  std::cout << "j1: \n" << j1<<std::endl;
-  std::cout << "j2: \n" << j2 << "\ndiff: \n"<< j1-j2 << std::endl;
-#else
+  // jacobian_dh(x,calib_dataset[0],j1);
+  // jacobian_kim2(x,calib_dataset[0],j2);
+  // std::cout << "j1: \n" << j1<<std::endl;
+  // std::cout << "j2: \n" << j2 << "\ndiff: \n"<< j1-j2 << std::endl;
+
   Eigen::VectorXd p_total;
   Eigen::MatrixXd jac_total;
   Eigen::VectorXd del_phi;
@@ -261,11 +264,11 @@ int main(int argc, char**argv)
       function_kim2(x, calib_dataset[i], p_total.segment<3>(i*3));
       jacobian_kim2(x, calib_dataset[i], jac_total.block<3,N_CAL>(i*3, 0));
     }
-    std::cout << "\neval: " << p_total.squaredNorm() / total_len << std::endl;
+    std::cout << "eval: " << p_total.squaredNorm() / total_len << std::endl;
     del_phi = jac_total.jacobiSvd(Eigen::ComputeThinU | Eigen::ComputeThinV).solve(p_total);
-    std::cout << "\ndphi: " << del_phi.transpose() << std::endl;
-    x -= del_phi; // jacobi is oppisite direction
-    std::cout << "\nx: " << x.transpose() << std::endl;
+    std::cout << "dphi: " << del_phi.transpose() << std::endl;
+    x += del_phi; // jacobi is oppisite direction
+    std::cout << "x: " << x.transpose() << std::endl;
     if (del_phi.norm() < 1e-9) break;
   }
   std::ofstream x_out_1("x_out_1.txt"), x_out_2("x_out_2.txt"), x_out_3("x_out_3.txt");
@@ -320,6 +323,6 @@ int main(int argc, char**argv)
     auto t = T_0e.translation();
     x_out_3 << t.transpose() << std::endl;
   }
-#endif
+
   return 0;
 }
