@@ -9,9 +9,51 @@
 #include <robot_model/franka_panda_model.h>
 #include "suhan_benchmark.h"
 
-// #define TEST_PRINT
+#include <unsupported/Eigen/NonLinearOptimization>
+#include <unsupported/Eigen/NumericalDiff>
 
-const int N_PARAM = 3;
+
+
+// // Generic functor
+// template<typename _Scalar, int NX = Eigen::Dynamic, int NY = Eigen::Dynamic>
+// struct Functor
+// {
+// typedef _Scalar Scalar;
+// enum {
+//     InputsAtCompileTime = NX,
+//     ValuesAtCompileTime = NY
+// };
+// typedef Eigen::Matrix<Scalar,InputsAtCompileTime,1> InputType;
+// typedef Eigen::Matrix<Scalar,ValuesAtCompileTime,1> ValueType;
+// typedef Eigen::Matrix<Scalar,ValuesAtCompileTime,InputsAtCompileTime> JacobianType;
+
+// int m_inputs, m_values;
+
+// Functor() : m_inputs(InputsAtCompileTime), m_values(ValuesAtCompileTime) {}
+// Functor(int inputs, int values) : m_inputs(inputs), m_values(values) {}
+
+// int inputs() const { return m_inputs; }
+// int values() const { return m_values; }
+
+// };
+
+// struct my_functor : Functor<double>
+// {
+// my_functor(void): Functor<double>(2,2) {}
+// int operator()(const Eigen::VectorXd &x, Eigen::VectorXd &fvec) const
+// {
+//     // Implement y = 10*(x0+3)^2 + (x1-5)^2
+//     fvec(0) = 10.0*pow(x(0)+3.0,2) +  pow(x(1)-5.0,2);
+//     fvec(1) = 0;
+
+//     return 0;
+// }
+// };
+
+
+// #define DEBUG_MODE
+
+const int N_PARAM = 6;
 const int N_ARM = 3;  //number of arms
 const int N_DH = 4;   // number of dh parameters to calibrate
 const int N_J = 7;    // number of joints in one robot
@@ -25,16 +67,22 @@ std::vector<Eigen::Isometry3d> T_W0;
 std::vector<FrankaPandaModel> fpm;
 std::vector<double> distTrue;
 
-std::string data_name = "data_1";
+//   /home/kimhc/git/kinematics_calibration/data/CLOSED_CALIBRATION/
+std::string user_name = "kimhc";
+std::string current_workspace = "/home/" + user_name + "/git/kinematics_calibration/";
+std::string data_input;
+std::string data_iter;
+std::string data_offset;
 Eigen::VectorXd del_phi(N_CAL);
 Eigen::VectorXd p_total;
 Eigen::MatrixXd jacobian;
 int num_data;
+Eigen::IOFormat tab_format(Eigen::FullPrecision, 0, "\t", "\n");
 
 void initialize()
 {
   std::ifstream rf; 
-  rf.open(data_name+".txt");
+  rf.open(data_input);
   while (!rf.eof())
   {  
     Eigen::Matrix<double, N_ARM, N_J> ar;
@@ -74,9 +122,9 @@ void initialize()
   T_W0.push_back(T_W0_RIGHT);
   T_W0.push_back(T_W0_TOP);
 
-  distTrue.push_back(0.6); // LEFT&RIGHT
-  distTrue.push_back(0.736078); // RIGHT&TOP
-  distTrue.push_back(0.426392); // TOP&LEFT
+  distTrue.push_back(0.207); // LEFT&RIGHT
+  distTrue.push_back(0.292742); // RIGHT&TOP
+  distTrue.push_back(0.207); // TOP&LEFT
 
   for (int i=0; i<N_ARM; i++)
   {
@@ -102,8 +150,8 @@ Eigen::VectorXd getDistanceDiff()
   for (int i=0; i<num_data; i++)
   {
     auto T0 = (T_W0[0]) * fpm[0].getTransform(theta_data[i].row(0));
-    auto T1 = (T_W0[1]) * fpm[0].getTransform(theta_data[i].row(1));
-    auto T2 = (T_W0[2]) * fpm[0].getTransform(theta_data[i].row(2));
+    auto T1 = (T_W0[1]) * fpm[1].getTransform(theta_data[i].row(1));
+    auto T2 = (T_W0[2]) * fpm[2].getTransform(theta_data[i].row(2));
 
     Eigen::Vector3d X0 = T0.translation();
     Eigen::Vector3d X1 = T1.translation();
@@ -124,7 +172,7 @@ Eigen::VectorXd getDistanceDiff()
       del_(i*N_PARAM + 5) = q2.angularDistance(q0);
     }
 
-#ifdef TEST_PRINT
+#ifdef DEBUG_MODE
     std::cout<<"Transform_LEFT: "<<X0.transpose()<<std::endl;
     std::cout<<"Transform_RIGHT: "<<X1.transpose()<<std::endl;
     std::cout<<"Transform_TOP: "<<X2.transpose()<<std::endl;
@@ -196,7 +244,44 @@ void getJacobian()
 
 int main(int argc, char**argv)
 {
+  std::string prefix;
+  if (argc >= 2)
+  {
+    prefix = argv[1];
+    data_input = prefix + "_input_data.txt";
+    data_iter = prefix + "_iteration_info.txt";
+    data_offset = prefix + "_offset_data.txt";
+  }
+  else
+  {
+    data_input = current_workspace + "data/CLOSED_CALIBRATION/1_input_data.txt";
+    data_iter = current_workspace + "data/CLOSED_CALIBRATION/1_iteration_info.txt";
+    data_offset = current_workspace + "data/CLOSED_CALIBRATION/1__offset_data.txt";    
+  }
+  std::cout<<"opening: "<<data_input<<std::endl;
+  std::ofstream iter_save(data_iter);
   initialize();
+  if (argc >= 3)
+  {
+    std::string offset_loader = prefix + "_offset_data.txt";
+    std::ifstream rf; 
+    rf.open(offset_loader);
+    for (int arm_=0; arm_<N_ARM; arm_++)
+    {
+      for (int j=0; j<N_J; j++)
+      {
+        for (int d=0; d<N_DH; d++)
+        {
+          rf >> offset_matrix[arm_](j,d);
+        }
+      }
+    }
+    rf.close();
+    std::cout << "\n<<LOADED OFFSET>>" << std::endl;
+    std::cout << "offset_matrix LEFT:\n" << offset_matrix[0] << std::endl;
+    std::cout << "\noffset_matrix RIGHT:\n" << offset_matrix[1] << std::endl;
+    std::cout << "\noffset_matrix TOP:\n" << offset_matrix[2] << std::endl;
+  }
 
   int iter = 100;
   while (iter--)
@@ -205,8 +290,31 @@ int main(int argc, char**argv)
     p_total = getDistanceDiff();
     getJacobian();
     std::cout << "\neval: " << p_total.squaredNorm() / num_data << std::endl;
-    del_phi = jacobian.jacobiSvd(Eigen::ComputeThinU | Eigen::ComputeThinV).solve(p_total);
-    std::cout << "\ndel_phi.norm(): " << del_phi.norm() << std::endl;
+
+    Eigen::Matrix<double, 84, 84> weight;
+    weight.setIdentity();
+    weight(25,25) = 1e-5;
+    weight(25+28*1,25+28*1) = 1e-5;
+    weight(25+28*2,25+28*2) = 1e-5;
+
+    auto & j = jacobian;
+    double lambda = 0.01;
+    Eigen::MatrixXd j_diag = (j.transpose() * j ).diagonal().asDiagonal();
+    auto j_inv = (j.transpose() * j + lambda * j_diag).inverse() * j.transpose();
+    del_phi = weight * j_inv * p_total;
+    // std::cout << j.cols() << " row: " << j.rows() << std::endl;
+    // std::cout << j << std::endl;
+    // std::cout << j_inv.cols() << " row: " << j_inv.rows() << std::endl;
+    // std::cout << j_inv << std::endl;
+    // std::cout << j_diag.diagonal().transpose() << std::endl;
+    // std::cout << j_diag.cols() << " row: " << j_diag.rows() << std::endl;
+    // std::cout << j_diag << std::endl;
+    // auto j_inv = (j.transpose() * j + lambda * j_diag).inverse() * j.transpose();
+
+    // del_phi = jacobian.jacobiSvd(Eigen::ComputeThinU | Eigen::ComputeThinV).solve(p_total);
+    // del_phi = weight * del_phi;
+
+    std::cout << "\ndel_phi.norm(): " << del_phi.norm() <<"\n"<< std::endl;
     for (int arm_=0; arm_<N_ARM; arm_++)
     {
       for (int j=0; j<N_J; j++)
@@ -214,14 +322,43 @@ int main(int argc, char**argv)
         offset_matrix[arm_].row(j) -= del_phi.segment<N_DH>(arm_*N_JDH + j*N_DH);
       }
     }
-    if (del_phi.norm() < 1e-9) 
+    std::cout << "\noffset_matrix LEFT:\n" << offset_matrix[0] << std::endl;
+    std::cout << "\noffset_matrix RIGHT:\n" << offset_matrix[1] << std::endl;
+    std::cout << "\noffset_matrix TOP:\n" << offset_matrix[2] << std::endl;
+    if (del_phi.norm() < 1e-9)
     {
-      std::cout << "\noffset_matrix LEFT:\n" << offset_matrix[0] << std::endl;
-      std::cout << "\noffset_matrix RIGHT:\n" << offset_matrix[1] << std::endl;
-      std::cout << "\noffset_matrix TOP:\n" << offset_matrix[2] << std::endl;
       std::cout<<"reached optimal value at iter: "<<100 - iter<<std::endl;
       break;
     }
+    iter_save << "iteration: "<< 100 - iter << std::endl;
+    iter_save << "eval(before): "<< p_total.squaredNorm() << std::endl;
+    iter_save << "del_phi.norm(): "<< del_phi.norm() << std::endl;
+    
+    iter_save << "PANDA LEFT"<< std::endl;
+    for (int j=0; j<N_J; j++)
+      iter_save << offset_matrix[0].row(j).format(tab_format) <<std::endl;
+    iter_save << "PANDA RIGHT"<< std::endl;
+    for (int j=0; j<N_J; j++)
+      iter_save << offset_matrix[1].row(j).format(tab_format) <<std::endl;
+    iter_save << "PANDA TOP"<< std::endl;
+    for (int j=0; j<N_J; j++)
+      iter_save << offset_matrix[2].row(j).format(tab_format) <<std::endl;
+    iter_save <<"\n"<< std::endl;
+
+    std::ofstream offset_save(data_offset);
+    for (int j=0; j<N_J; j++)
+      offset_save << offset_matrix[0].row(j).format(tab_format) <<std::endl;
+    for (int j=0; j<N_J; j++)
+      offset_save << offset_matrix[1].row(j).format(tab_format) <<std::endl;
+    for (int j=0; j<N_J; j++)
+    {
+      if(j < N_J-1)
+       offset_save << offset_matrix[2].row(j).format(tab_format) <<std::endl;
+      else
+       offset_save << offset_matrix[2].row(j).format(tab_format);
+    }
+    offset_save.close();
   }
+
   return 0;
 }

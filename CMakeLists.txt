@@ -48,3 +48,14 @@ target_link_libraries(hc_closed_chain_calibration_node
   ${RBDL_LIBRARY}
   pthread
 )
+
+add_executable(data_collector
+  src/data_collector.cpp
+  src/robot_model/franka_panda_model.cpp
+)
+
+target_link_libraries(data_collector
+  ${catkin_LIBRARIES}  
+  ${RBDL_LIBRARY}
+  pthread
+)
