@@ -59,3 +59,14 @@ target_link_libraries(data_collector
   ${RBDL_LIBRARY}
   pthread
 )
+
+add_executable(triple_calibration
+  src/triple_calibration.cpp
+  src/robot_model/franka_panda_model.cpp
+)
+
+target_link_libraries(triple_calibration
+  ${catkin_LIBRARIES}  
+  ${RBDL_LIBRARY}
+  pthread
+)

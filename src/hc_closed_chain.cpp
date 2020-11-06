@@ -12,8 +12,6 @@
 #include <unsupported/Eigen/NonLinearOptimization>
 #include <unsupported/Eigen/NumericalDiff>
 
-
-
 // // Generic functor
 // template<typename _Scalar, int NX = Eigen::Dynamic, int NY = Eigen::Dynamic>
 // struct Functor
@@ -263,9 +261,9 @@ int main(int argc, char**argv)
   initialize();
   if (argc >= 3)
   {
-    std::string offset_loader = prefix + "_offset_data.txt";
+    std::cout << "\n<<USING SAVED OFFSET>>" << std::endl;
     std::ifstream rf; 
-    rf.open(offset_loader);
+    rf.open(data_offset);
     for (int arm_=0; arm_<N_ARM; arm_++)
     {
       for (int j=0; j<N_J; j++)
@@ -277,15 +275,15 @@ int main(int argc, char**argv)
       }
     }
     rf.close();
-    std::cout << "\n<<LOADED OFFSET>>" << std::endl;
     std::cout << "offset_matrix LEFT:\n" << offset_matrix[0] << std::endl;
     std::cout << "\noffset_matrix RIGHT:\n" << offset_matrix[1] << std::endl;
-    std::cout << "\noffset_matrix TOP:\n" << offset_matrix[2] << std::endl;
+    std::cout << "\noffset_matrix TOP:\n" << offset_matrix[2] << "\n\n" <<std::endl;
   }
 
   int iter = 100;
   while (iter--)
   {
+    std::cout<<"iteration: "<<100-iter<<std::endl;
     for (int i=0; i<N_ARM; i++) {fpm[i].initModel(offset_matrix[i]);}
     p_total = getDistanceDiff();
     getJacobian();
@@ -314,7 +312,7 @@ int main(int argc, char**argv)
     // del_phi = jacobian.jacobiSvd(Eigen::ComputeThinU | Eigen::ComputeThinV).solve(p_total);
     // del_phi = weight * del_phi;
 
-    std::cout << "\ndel_phi.norm(): " << del_phi.norm() <<"\n"<< std::endl;
+    std::cout << "del_phi.norm(): " << del_phi.norm() <<"\n"<< std::endl;
     for (int arm_=0; arm_<N_ARM; arm_++)
     {
       for (int j=0; j<N_J; j++)
@@ -330,33 +328,22 @@ int main(int argc, char**argv)
       std::cout<<"reached optimal value at iter: "<<100 - iter<<std::endl;
       break;
     }
+
     iter_save << "iteration: "<< 100 - iter << std::endl;
     iter_save << "eval(before): "<< p_total.squaredNorm() << std::endl;
     iter_save << "del_phi.norm(): "<< del_phi.norm() << std::endl;
-    
     iter_save << "PANDA LEFT"<< std::endl;
-    for (int j=0; j<N_J; j++)
-      iter_save << offset_matrix[0].row(j).format(tab_format) <<std::endl;
+    iter_save << offset_matrix[0].format(tab_format) << std::endl;
     iter_save << "PANDA RIGHT"<< std::endl;
-    for (int j=0; j<N_J; j++)
-      iter_save << offset_matrix[1].row(j).format(tab_format) <<std::endl;
+    iter_save << offset_matrix[1].format(tab_format) << std::endl;
     iter_save << "PANDA TOP"<< std::endl;
-    for (int j=0; j<N_J; j++)
-      iter_save << offset_matrix[2].row(j).format(tab_format) <<std::endl;
+    iter_save << offset_matrix[2].format(tab_format) << std::endl;
     iter_save <<"\n"<< std::endl;
 
     std::ofstream offset_save(data_offset);
-    for (int j=0; j<N_J; j++)
-      offset_save << offset_matrix[0].row(j).format(tab_format) <<std::endl;
-    for (int j=0; j<N_J; j++)
-      offset_save << offset_matrix[1].row(j).format(tab_format) <<std::endl;
-    for (int j=0; j<N_J; j++)
-    {
-      if(j < N_J-1)
-       offset_save << offset_matrix[2].row(j).format(tab_format) <<std::endl;
-      else
-       offset_save << offset_matrix[2].row(j).format(tab_format);
-    }
+    offset_save << offset_matrix[0].format(tab_format) <<std::endl;
+    offset_save << offset_matrix[1].format(tab_format) <<std::endl;
+    offset_save << offset_matrix[2].format(tab_format);
     offset_save.close();
   }
 
