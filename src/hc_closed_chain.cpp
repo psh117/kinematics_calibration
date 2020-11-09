@@ -6,6 +6,7 @@
 #include <vector>
 #include <mutex>
 #include <thread>
+#include <string>
 #include <robot_model/franka_panda_model.h>
 #include "suhan_benchmark.h"
 
@@ -257,8 +258,8 @@ int main(int argc, char**argv)
     data_offset = current_workspace + "data/CLOSED_CALIBRATION/1__offset_data.txt";    
   }
   std::cout<<"opening: "<<data_input<<std::endl;
-  std::ofstream iter_save(data_iter);
   initialize();
+  double lambda = 1.0;
   if (argc >= 3)
   {
     std::cout << "\n<<USING SAVED OFFSET>>" << std::endl;
@@ -278,12 +279,17 @@ int main(int argc, char**argv)
     std::cout << "offset_matrix LEFT:\n" << offset_matrix[0] << std::endl;
     std::cout << "\noffset_matrix RIGHT:\n" << offset_matrix[1] << std::endl;
     std::cout << "\noffset_matrix TOP:\n" << offset_matrix[2] << "\n\n" <<std::endl;
+    lambda = strtod(argv[2],NULL);
+    std::cout << "lambda: " << lambda << std::endl;
+    data_iter = prefix + "_" + std::to_string(lambda) + "_iteration_info.txt";
+    data_offset = prefix + "_" + std::to_string(lambda) + "_offset_data.txt";
   }
 
+  std::ofstream iter_save(data_iter);
   int iter = 100;
   while (iter--)
   {
-    std::cout<<"iteration: "<<100-iter<<std::endl;
+    std::cout<<"\n\niteration: "<<100-iter<<std::endl;
     for (int i=0; i<N_ARM; i++) {fpm[i].initModel(offset_matrix[i]);}
     p_total = getDistanceDiff();
     getJacobian();
@@ -296,7 +302,7 @@ int main(int argc, char**argv)
     weight(25+28*2,25+28*2) = 1e-5;
 
     auto & j = jacobian;
-    double lambda = 0.01;
+    
     Eigen::MatrixXd j_diag = (j.transpose() * j ).diagonal().asDiagonal();
     auto j_inv = (j.transpose() * j + lambda * j_diag).inverse() * j.transpose();
     del_phi = weight * j_inv * p_total;
@@ -312,7 +318,7 @@ int main(int argc, char**argv)
     // del_phi = jacobian.jacobiSvd(Eigen::ComputeThinU | Eigen::ComputeThinV).solve(p_total);
     // del_phi = weight * del_phi;
 
-    std::cout << "del_phi.norm(): " << del_phi.norm() <<"\n"<< std::endl;
+    std::cout << "del_phi.norm(): " << del_phi.norm() << std::endl;
     for (int arm_=0; arm_<N_ARM; arm_++)
     {
       for (int j=0; j<N_J; j++)
@@ -330,7 +336,7 @@ int main(int argc, char**argv)
     }
 
     iter_save << "iteration: "<< 100 - iter << std::endl;
-    iter_save << "eval(before): "<< p_total.squaredNorm() << std::endl;
+    iter_save << "eval(before): "<< p_total.squaredNorm() / num_data << std::endl;
     iter_save << "del_phi.norm(): "<< del_phi.norm() << std::endl;
     iter_save << "PANDA LEFT"<< std::endl;
     iter_save << offset_matrix[0].format(tab_format) << std::endl;

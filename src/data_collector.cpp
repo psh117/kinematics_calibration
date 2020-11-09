@@ -11,14 +11,10 @@
 
 #define DEBUG_MODE
 
-std::string arm_1 = "panda_left";
-std::string arm_2 = "panda_right";
-std::string arm_3 = "panda_top";
-std::string user_name = "kimhc";
-std::string current_workspace = "/home/" + user_name + "/git/kinematics_calibration/";
+std::string current_workspace = "/home/kimhc/git/kinematics_calibration/";
 std::string data_input = current_workspace + "data/CLOSED_CALIBRATION/q.txt";
-std::string middle_input = current_workspace + "data/CLOSED_CALIBRATION/3_input_data.txt";
-std::string data_output = current_workspace + "data/CLOSED_CALIBRATION/collected_q.txt";
+std::string middle_input = current_workspace + "data/CLOSED_CALIBRATION/_input_data.txt";
+std::string data_output = current_workspace + "data/CLOSED_CALIBRATION/notuse_input_data.txt";
 Eigen::IOFormat tab_format(Eigen::FullPrecision, 0, "\t", "\n");
 
 const int N_ROBOT = 3;  //number of robots
@@ -29,14 +25,14 @@ const double DEL_MOVE = 1e-3 * 3.0;
 void collect_one()
 {
   int input_counter_ = 0; int middle_counter_ = 0;
-  Eigen::VectorXd q_1(N_TOT); q_1.setZero();
-  std::vector<Eigen::VectorXd> saver_;
+  Eigen::Matrix<double,N_TOT,1> q_1; q_1.setZero();
+  std::vector<Eigen::Matrix<double,N_TOT,1>> saver_;
   std::ifstream rf; 
   rf.open(data_input);
   while (!rf.eof())
   { 
     input_counter_++;
-    Eigen::VectorXd new_q_1(N_TOT);
+    Eigen::Matrix<double,N_TOT,1> new_q_1;
 
     for(int j=0; j<N_TOT; j++)
     {
@@ -48,7 +44,6 @@ void collect_one()
       middle_counter_++;
       saver_.push_back(new_q_1);
       q_1 = new_q_1;
-      
     }
   }
   rf.close();
@@ -69,14 +64,15 @@ void collect_one()
 void collect_two()
 {
   int collect_counter_ = 0;
-  std::vector<Eigen::VectorXd> collector;
+  std::vector<Eigen::Matrix<double,N_TOT,1>> collector;
   bool is_first_ = true;
+  bool is_save_ = true;
   std::ifstream rf; 
   rf.open(middle_input);
+
   while (!rf.eof())
   { 
-    Eigen::VectorXd new_q_1(N_TOT);
-
+    Eigen::Matrix<double,N_TOT,1> new_q_1;
     for(int j=0; j<N_TOT; j++)
     {
       rf >> new_q_1(j);
@@ -84,18 +80,21 @@ void collect_two()
 
     if (is_first_)
     {
+      std::cout<<"is first"<<std::endl;
       is_first_ = false;
+      is_save_ = false;
       collector.push_back(new_q_1);
       collect_counter_++;
     }
-    bool is_save_ = true;
-    for(int i=0; i<collector.size(); i++)
+
+    int size_before = collector.size();
+    for(int i=0; i<size_before; i++)
     {
       if((collector[i]-new_q_1).norm() < DEL_MOVE)
       {
         is_save_ = false;
       }
-      if (i == collector.size()-1)
+      if (i == size_before-1)
       {
         if (is_save_)
         {
@@ -104,9 +103,10 @@ void collect_two()
         }
         is_save_ = true;
       }
-
     }
   }
+  rf.close();
+
   std::ofstream output_work(data_output);
   for (int i=0; i<collector.size();i++)
   {
@@ -115,7 +115,6 @@ void collect_two()
     else
       output_work << collector[i].transpose().format(tab_format)<<std::endl;
   }
-  rf.close();
   output_work.close();
 #ifdef DEBUG_MODE
   std::cout<<"collected size: "<<collect_counter_<<std::endl;
