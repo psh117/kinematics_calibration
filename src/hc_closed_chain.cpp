@@ -287,13 +287,18 @@ int main(int argc, char**argv)
 
   std::ofstream iter_save(data_iter);
   int iter = 100;
+  double ev_b;
+  double ev_f = 0.0;
   while (iter--)
   {
     std::cout<<"\n\niteration: "<<100-iter<<std::endl;
     for (int i=0; i<N_ARM; i++) {fpm[i].initModel(offset_matrix[i]);}
+    ev_b = ev_f;
     p_total = getDistanceDiff();
+    ev_f = p_total.squaredNorm() / num_data;
     getJacobian();
-    std::cout << "\neval: " << p_total.squaredNorm() / num_data << std::endl;
+    if (iter < 99) {std::cout << "\nrate: " << ((ev_b - ev_f) / ev_b)*100.0 << std::endl;}
+    std::cout << "\neval: " << ev_f << std::endl;
 
     Eigen::Matrix<double, 84, 84> weight;
     weight.setIdentity();
