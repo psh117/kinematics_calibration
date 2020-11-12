@@ -66,7 +66,7 @@ std::vector<Eigen::Isometry3d> T_W0;
 std::vector<FrankaPandaModel> fpm;
 std::vector<double> distTrue;
 
-//   /home/kimhc/git/kinematics_calibration/data/CLOSED_CALIBRATION/
+//   /home/kimhc/git/kinematics_calibration/data/CLOSED_CALIBRATION/2 40.0
 std::string user_name = "kimhc";
 std::string current_workspace = "/home/" + user_name + "/git/kinematics_calibration/";
 std::string data_input;
@@ -331,9 +331,11 @@ int main(int argc, char**argv)
         offset_matrix[arm_].row(j) -= del_phi.segment<N_DH>(arm_*N_JDH + j*N_DH);
       }
     }
+#ifdef DEBUG_MODE
     std::cout << "\noffset_matrix LEFT:\n" << offset_matrix[0] << std::endl;
     std::cout << "\noffset_matrix RIGHT:\n" << offset_matrix[1] << std::endl;
     std::cout << "\noffset_matrix TOP:\n" << offset_matrix[2] << std::endl;
+#endif
     if (del_phi.norm() < 1e-9)
     {
       std::cout<<"reached optimal value at iter: "<<100 - iter<<std::endl;
